@@ -26,8 +26,8 @@ use reth_rpc_eth_types::{
     TransactionSource,
 };
 use reth_storage_api::{
-    BlockNumReader, BlockReaderIdExt, ProviderBlock, ProviderReceipt, ProviderTx, ReceiptProvider,
-    TransactionsProvider,
+    BlockIdReader, BlockNumReader, BlockReaderIdExt, ProviderBlock, ProviderReceipt, ProviderTx,
+    ReceiptProvider, TransactionsProvider,
 };
 use reth_transaction_pool::{
     AddedTransactionOutcome, PoolTransaction, TransactionOrigin, TransactionPool,
@@ -276,6 +276,73 @@ pub trait EthTransactions: LoadTransaction<Provider: BlockReaderIdExt> {
             }
 
             Ok(None)
+        }
+    }
+
+    /// Get all transactions by [`BlockId`].
+    ///
+    /// Returns `Ok(None)` if the block does not exist.
+    #[expect(clippy::type_complexity)]
+    fn transactions_by_block_id(
+        &self,
+        block_id: BlockId,
+    ) -> impl Future<Output = Result<Option<Vec<RpcTransaction<Self::NetworkTypes>>>, Self::Error>> + Send
+    where
+        Self: LoadBlock,
+        Self::Provider: BlockIdReader,
+    {
+        async move {
+            let block_info = if let Some(block) = self.recovered_block(block_id).await? {
+                Some((block.hash(), block.number(), block.base_fee_per_gas()))
+            } else {
+                None
+            };
+
+            let block_hash = match block_id {
+                BlockId::Hash(hash) => hash.block_hash,
+                BlockId::Number(_) => {
+                    if let Some(hash) = self
+                        .provider()
+                        .block_hash_for_id(block_id)
+                        .map_err(Self::Error::from_eth_err)?
+                    {
+                        hash
+                    } else {
+                        return Ok(None);
+                    }
+                }
+            };
+
+            let transactions = EthTransactions::transactions_by_block(self, block_hash).await?;
+
+            match transactions {
+                Some(txs) => {
+                    let mut rpc_transactions = Vec::with_capacity(txs.len());
+                    for (index, tx) in txs.into_iter().enumerate() {
+                        let recovered = tx
+                            .try_into_recovered_unchecked()
+                            .map_err(|_| EthApiError::InvalidTransactionSignature)?;
+
+                        let source = match block_info {
+                            Some((block_hash, block_number, base_fee)) => {
+                                TransactionSource::Block {
+                                    transaction: recovered,
+                                    index: index as u64,
+                                    block_hash,
+                                    block_number,
+                                    base_fee,
+                                }
+                            }
+                            None => TransactionSource::Pool(recovered),
+                        };
+
+                        let rpc_tx = source.into_transaction(self.tx_resp_builder())?;
+                        rpc_transactions.push(rpc_tx);
+                    }
+                    Ok(Some(rpc_transactions))
+                }
+                None => Ok(None),
+            }
         }
     }
 
