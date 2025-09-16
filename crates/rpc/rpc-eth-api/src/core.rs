@@ -164,6 +164,14 @@ pub trait EthApi<TxReq: RpcObject, T: RpcObject, B: RpcObject, R: RpcObject, H: 
         index: Index,
     ) -> RpcResult<Option<T>>;
 
+    /// Returns information about all transactions by block hash.
+    #[method(name = "getTransactionsByBlockHash")]
+    async fn transactions_by_block_hash(&self, hash: B256) -> RpcResult<Option<Vec<T>>>;
+
+    /// Returns information about all transactions by block number.
+    #[method(name = "getTransactionsByBlockNumber")]
+    async fn transactions_by_block_number(&self, number: BlockNumberOrTag) -> RpcResult<Option<Vec<T>>>;
+
     /// Returns information about a transaction by sender and nonce.
     #[method(name = "getTransactionBySenderAndNonce")]
     async fn transaction_by_sender_and_nonce(
@@ -582,6 +590,26 @@ where
     ) -> RpcResult<Option<RpcTransaction<T::NetworkTypes>>> {
         trace!(target: "rpc::eth", ?number, ?index, "Serving eth_getTransactionByBlockNumberAndIndex");
         Ok(EthTransactions::transaction_by_block_and_tx_index(self, number.into(), index.into())
+            .await?)
+    }
+
+    /// Handler for: `eth_getTransactionsByBlockHash`
+    async fn transactions_by_block_hash(
+        &self,
+        hash: B256,
+    ) -> RpcResult<Option<RpcTransaction<T::NetworkTypes>>> {
+        trace!(target: "rpc::eth", ?hash, "Serving eth_getTransactionsByBlockHash");
+        Ok(EthTransactions::transactions_by_block(self, hash.into())
+            .await?)
+    }
+
+    /// Handler for: `eth_getTransactionsByBlockNumber`
+    async fn transactions_by_block_number(
+        &self,
+        number: BlockNumberOrTag,
+    ) -> RpcResult<Option<RpcTransaction<T::NetworkTypes>>> {
+        trace!(target: "rpc::eth", ?number, "Serving eth_getTransactionsByBlockNumber");
+        Ok(EthTransactions::transactions_by_block(self, number.into())
             .await?)
     }
 

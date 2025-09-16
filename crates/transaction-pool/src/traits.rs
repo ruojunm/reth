@@ -503,7 +503,7 @@ pub trait TransactionPool: Clone + Debug + Send + Sync {
     ) -> Vec<Arc<ValidPoolTransaction<Self::Transaction>>>;
 
     /// Returns all queued transactions sent by a given user
-    fn get_queued_transactions_by_sender(
+    fn get_queued_transactions_by_seget_pending_transactionsnder(
         &self,
         sender: Address,
     ) -> Vec<Arc<ValidPoolTransaction<Self::Transaction>>>;
