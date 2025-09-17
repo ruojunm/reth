@@ -372,6 +372,39 @@ pub trait EthTransactions: LoadTransaction<Provider: BlockReaderIdExt> {
         }
     }
 
+    /// Get the transaction data and receipt for the given hash.
+    ///
+    /// Returns `Ok(Some((data, receipt)))` if the transaction exists.
+    /// Returns `Ok(None)` if the transaction does not exist.
+    fn transaction_data_and_receipt(
+        &self,
+        hash: B256,
+    ) -> impl Future<
+        Output = Result<
+            Option<(
+                Option<RpcTransaction<Self::NetworkTypes>>,
+                Option<RpcReceipt<Self::NetworkTypes>>,
+            )>,
+            Self::Error,
+        >,
+    > + Send
+    where
+        Self: LoadReceipt,
+    {
+        async move {
+            let receipt = self.transaction_receipt(hash).await?;
+            let data = match LoadTransaction::transaction_by_hash(self, hash).await? {
+                Some(tx) => {
+                    let rpc_tx = tx.into_transaction(self.tx_resp_builder())?;
+                    Some(rpc_tx)
+                }
+                None => None,
+            };
+
+            Ok(Some((data, receipt)))
+        }
+    }
+
     /// Find a transaction by sender's address and nonce.
     fn get_transaction_by_sender_and_nonce(
         &self,

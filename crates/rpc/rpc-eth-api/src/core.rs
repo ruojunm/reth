@@ -191,9 +191,12 @@ pub trait EthApi<TxReq: RpcObject, T: RpcObject, B: RpcObject, R: RpcObject, H: 
     #[method(name = "getTransactionReceipt")]
     async fn transaction_receipt(&self, hash: B256) -> RpcResult<Option<R>>;
 
-    // /// Returns the receipt of a transaction by transaction hash.
-    // #[method(name = "getTransactionDataAndReceipt")]
-    // async fn transaction_data_and_receipt(&self, hash: B256) -> RpcResult<Option<R>>;
+    /// Returns the receipt of a transaction by transaction hash.
+    #[method(name = "getTransactionDataAndReceipt")]
+    async fn transaction_data_and_receipt(
+        &self,
+        hash: B256,
+    ) -> RpcResult<Option<(Option<T>, Option<R>)>>;
 
     /// Returns the balance of the account of given address.
     #[method(name = "getBalance")]
@@ -539,7 +542,9 @@ where
     }
 
     /// Handler for: `eth_pendingTransactions`
-    async fn pending_transactions(&self) -> RpcResult<Option<Vec<RpcTransaction<T::NetworkTypes>>>> {
+    async fn pending_transactions(
+        &self,
+    ) -> RpcResult<Option<Vec<RpcTransaction<T::NetworkTypes>>>> {
         trace!(target: "rpc::eth", "Serving eth_pendingTransactions");
         Ok(EthTransactions::pending_transactions(self).await?)
     }
@@ -649,13 +654,15 @@ where
     }
 
     /// Handler for: `eth_getTransactionDataAndReceipt`
-    // async fn transaction_data_and_receipt(
-    //     &self,
-    //     hash: B256,
-    // ) -> RpcResult<Option<RpcReceipt<T::NetworkTypes>>> {
-    //     trace!(target: "rpc::eth", ?hash, "Serving eth_getTransactionDataAndReceipt");
-    //     Ok(EthTransactions::transaction_data_and_receipt(self, hash).await?)
-    // }
+    async fn transaction_data_and_receipt(
+        &self,
+        hash: B256,
+    ) -> RpcResult<
+        Option<(Option<RpcTransaction<T::NetworkTypes>>, Option<RpcReceipt<T::NetworkTypes>>)>,
+    > {
+        trace!(target: "rpc::eth", ?hash, "Serving eth_getTransactionDataAndReceipt");
+        Ok(EthTransactions::transaction_data_and_receipt(self, hash).await?)
+    }
 
     /// Handler for: `eth_getBalance`
     async fn balance(&self, address: Address, block_number: Option<BlockId>) -> RpcResult<U256> {
