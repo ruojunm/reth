@@ -121,6 +121,10 @@ pub trait EthApi<TxReq: RpcObject, T: RpcObject, B: RpcObject, R: RpcObject, H: 
         index: Index,
     ) -> RpcResult<Option<B>>;
 
+    /// Returns pending transactions.
+    #[method(name = "getPendingTransactions")]
+    async fn pending_transactions(&self) -> RpcResult<Option<Vec<T>>>;
+
     /// Returns the EIP-2718 encoded transaction if it exists.
     ///
     /// If this is a EIP-4844 transaction that is in the pool it will include the sidecar.
@@ -186,6 +190,10 @@ pub trait EthApi<TxReq: RpcObject, T: RpcObject, B: RpcObject, R: RpcObject, H: 
     /// Returns the receipt of a transaction by transaction hash.
     #[method(name = "getTransactionReceipt")]
     async fn transaction_receipt(&self, hash: B256) -> RpcResult<Option<R>>;
+
+    // /// Returns the receipt of a transaction by transaction hash.
+    // #[method(name = "getTransactionDataAndReceipt")]
+    // async fn transaction_data_and_receipt(&self, hash: B256) -> RpcResult<Option<R>>;
 
     /// Returns the balance of the account of given address.
     #[method(name = "getBalance")]
@@ -530,6 +538,12 @@ where
         Ok(EthBlocks::ommer_by_block_and_index(self, number.into(), index).await?)
     }
 
+    /// Handler for: `eth_pendingTransactions`
+    async fn pending_transactions(&self) -> RpcResult<Option<Vec<RpcTransaction<T::NetworkTypes>>>> {
+        trace!(target: "rpc::eth", "Serving eth_pendingTransactions");
+        Ok(EthTransactions::pending_transactions(self).await?)
+    }
+
     /// Handler for: `eth_getRawTransactionByHash`
     async fn raw_transaction_by_hash(&self, hash: B256) -> RpcResult<Option<Bytes>> {
         trace!(target: "rpc::eth", ?hash, "Serving eth_getRawTransactionByHash");
@@ -633,6 +647,15 @@ where
         trace!(target: "rpc::eth", ?hash, "Serving eth_getTransactionReceipt");
         Ok(EthTransactions::transaction_receipt(self, hash).await?)
     }
+
+    /// Handler for: `eth_getTransactionDataAndReceipt`
+    // async fn transaction_data_and_receipt(
+    //     &self,
+    //     hash: B256,
+    // ) -> RpcResult<Option<RpcReceipt<T::NetworkTypes>>> {
+    //     trace!(target: "rpc::eth", ?hash, "Serving eth_getTransactionDataAndReceipt");
+    //     Ok(EthTransactions::transaction_data_and_receipt(self, hash).await?)
+    // }
 
     /// Handler for: `eth_getBalance`
     async fn balance(&self, address: Address, block_number: Option<BlockId>) -> RpcResult<U256> {

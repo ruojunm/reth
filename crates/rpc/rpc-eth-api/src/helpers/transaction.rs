@@ -346,14 +346,31 @@ pub trait EthTransactions: LoadTransaction<Provider: BlockReaderIdExt> {
         }
     }
 
-    // fn get_pending_transactions(
-    //     &self,
-    // ) -> impl Future<Output = Result<Option<Vec<RpcTransaction<Self::NetworkTypes>>>, Self::Error>> + Send
-    // {
-    //     async move {
-    //         RpcNodeCore::pool(self).get_pending_transactions_by_origin().await.map_err(Self::Error::from_eth_err)
-    //     }
-    // }
+    /// Get all pending transactions from the transaction pool.
+    ///
+    /// Returns `Ok(Some(Vec))` with all pending transactions converted to RPC format.
+    /// Returns `Ok(Some(Vec::new()))` if there are no pending transactions.
+    fn pending_transactions(
+        &self,
+    ) -> impl Future<Output = Result<Option<Vec<RpcTransaction<Self::NetworkTypes>>>, Self::Error>> + Send
+    {
+        async move {
+            let pending_txs = RpcNodeCore::pool(self).pending_transactions();
+            if pending_txs.is_empty() {
+                return Ok(Some(Vec::new()));
+            }
+
+            let mut rpc_transactions = Vec::with_capacity(pending_txs.len());
+            for pool_tx in pending_txs {
+                let recovered = pool_tx.transaction.clone_into_consensus();
+                let source = TransactionSource::Pool(recovered);
+                let rpc_tx = source.into_transaction(self.tx_resp_builder())?;
+                rpc_transactions.push(rpc_tx);
+            }
+
+            Ok(Some(rpc_transactions))
+        }
+    }
 
     /// Find a transaction by sender's address and nonce.
     fn get_transaction_by_sender_and_nonce(
