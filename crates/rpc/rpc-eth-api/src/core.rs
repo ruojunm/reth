@@ -1,7 +1,7 @@
 //! Implementation of the [`jsonrpsee`] generated [`EthApiServer`] trait. Handles RPC requests for
 //! the `eth_` namespace.
 use crate::{
-    helpers::{EthApiSpec, EthBlocks, EthCall, EthFees, EthState, EthTransactions, FullEthApi},
+    helpers::{EthApiSpec, EthBlocks, EthCall, EthFees, EthState, EthTransactions, FullEthApi, transaction::TransactionDataAndReceipt},
     RpcBlock, RpcHeader, RpcReceipt, RpcTransaction,
 };
 use alloy_dyn_abi::TypedData;
@@ -122,7 +122,7 @@ pub trait EthApi<TxReq: RpcObject, T: RpcObject, B: RpcObject, R: RpcObject, H: 
     ) -> RpcResult<Option<B>>;
 
     /// Returns pending transactions.
-    #[method(name = "getPendingTransactions")]
+    #[method(name = "pendingTransactions")]
     async fn pending_transactions(&self) -> RpcResult<Option<Vec<T>>>;
 
     /// Returns the EIP-2718 encoded transaction if it exists.
@@ -191,12 +191,12 @@ pub trait EthApi<TxReq: RpcObject, T: RpcObject, B: RpcObject, R: RpcObject, H: 
     #[method(name = "getTransactionReceipt")]
     async fn transaction_receipt(&self, hash: B256) -> RpcResult<Option<R>>;
 
-    /// Returns the receipt of a transaction by transaction hash.
+    /// Returns the transaction data and receipt for a transaction by transaction hash.
     #[method(name = "getTransactionDataAndReceipt")]
     async fn transaction_data_and_receipt(
         &self,
         hash: B256,
-    ) -> RpcResult<Option<(Option<T>, Option<R>)>>;
+    ) -> RpcResult<Option<TransactionDataAndReceipt<T, R>>>;
 
     /// Returns the balance of the account of given address.
     #[method(name = "getBalance")]
@@ -658,7 +658,7 @@ where
         &self,
         hash: B256,
     ) -> RpcResult<
-        Option<(Option<RpcTransaction<T::NetworkTypes>>, Option<RpcReceipt<T::NetworkTypes>>)>,
+        Option<TransactionDataAndReceipt<RpcTransaction<T::NetworkTypes>, RpcReceipt<T::NetworkTypes>>>,
     > {
         trace!(target: "rpc::eth", ?hash, "Serving eth_getTransactionDataAndReceipt");
         Ok(EthTransactions::transaction_data_and_receipt(self, hash).await?)

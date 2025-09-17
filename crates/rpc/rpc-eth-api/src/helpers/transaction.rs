@@ -32,6 +32,7 @@ use reth_storage_api::{
 use reth_transaction_pool::{
     AddedTransactionOutcome, PoolTransaction, TransactionOrigin, TransactionPool,
 };
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::sync::Arc;
 
 /// Transaction related functions for the [`EthApiServer`](crate::EthApiServer) trait in
@@ -374,17 +375,19 @@ pub trait EthTransactions: LoadTransaction<Provider: BlockReaderIdExt> {
 
     /// Get the transaction data and receipt for the given hash.
     ///
-    /// Returns `Ok(Some((data, receipt)))` if the transaction exists.
+    /// Returns a structured response with `txData` and `receipt` fields.
     /// Returns `Ok(None)` if the transaction does not exist.
     fn transaction_data_and_receipt(
         &self,
         hash: B256,
     ) -> impl Future<
         Output = Result<
-            Option<(
-                Option<RpcTransaction<Self::NetworkTypes>>,
-                Option<RpcReceipt<Self::NetworkTypes>>,
-            )>,
+            Option<
+                TransactionDataAndReceipt<
+                    RpcTransaction<Self::NetworkTypes>,
+                    RpcReceipt<Self::NetworkTypes>,
+                >,
+            >,
             Self::Error,
         >,
     > + Send
@@ -401,7 +404,7 @@ pub trait EthTransactions: LoadTransaction<Provider: BlockReaderIdExt> {
                 None => None,
             };
 
-            Ok(Some((data, receipt)))
+            Ok(Some(TransactionDataAndReceipt { tx_data: data, receipt }))
         }
     }
 
@@ -627,6 +630,100 @@ pub trait EthTransactions: LoadTransaction<Provider: BlockReaderIdExt> {
             .find(|signer| signer.is_signer_for(account))
             .map(|signer| dyn_clone::clone_box(&**signer))
             .ok_or_else(|| SignError::NoAccount.into_eth_err())
+    }
+}
+
+/// Response structure for transaction data and receipt with custom field names
+#[derive(Debug, Clone)]
+pub struct TransactionDataAndReceipt<TX, RX> {
+    /// Transaction data (corresponds to "txData" in JSON)
+    pub tx_data: Option<TX>,
+    /// Transaction receipt
+    pub receipt: Option<RX>,
+}
+
+impl<TX, RX> Serialize for TransactionDataAndReceipt<TX, RX>
+where
+    TX: Serialize,
+    RX: Serialize,
+{
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        use serde::ser::SerializeStruct;
+        let mut state = serializer.serialize_struct("TransactionDataAndReceipt", 2)?;
+        state.serialize_field("txData", &self.tx_data)?;
+        state.serialize_field("receipt", &self.receipt)?;
+        state.end()
+    }
+}
+
+impl<'de, TX, RX> Deserialize<'de> for TransactionDataAndReceipt<TX, RX>
+where
+    TX: Deserialize<'de>,
+    RX: Deserialize<'de>,
+{
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        use serde::de::{MapAccess, Visitor};
+        use std::fmt;
+
+        struct TransactionDataAndReceiptVisitor<TX, RX>(std::marker::PhantomData<(TX, RX)>);
+
+        impl<'de, TX, RX> Visitor<'de> for TransactionDataAndReceiptVisitor<TX, RX>
+        where
+            TX: Deserialize<'de>,
+            RX: Deserialize<'de>,
+        {
+            type Value = TransactionDataAndReceipt<TX, RX>;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> fmt::Result {
+                formatter.write_str("struct TransactionDataAndReceipt")
+            }
+
+            fn visit_map<A>(self, mut map: A) -> Result<Self::Value, A::Error>
+            where
+                A: MapAccess<'de>,
+            {
+                let mut tx_data = None;
+                let mut receipt = None;
+
+                while let Some(key) = map.next_key::<String>()? {
+                    match key.as_str() {
+                        "txData" => {
+                            if tx_data.is_some() {
+                                return Err(serde::de::Error::duplicate_field("txData"));
+                            }
+                            tx_data = Some(map.next_value()?);
+                        }
+                        "receipt" => {
+                            if receipt.is_some() {
+                                return Err(serde::de::Error::duplicate_field("receipt"));
+                            }
+                            receipt = Some(map.next_value()?);
+                        }
+                        _ => {
+                            // Ignore unknown fields
+                            let _ = map.next_value::<serde::de::IgnoredAny>()?;
+                        }
+                    }
+                }
+
+                Ok(TransactionDataAndReceipt {
+                    tx_data: tx_data.unwrap_or(None),
+                    receipt: receipt.unwrap_or(None),
+                })
+            }
+        }
+
+        deserializer.deserialize_struct(
+            "TransactionDataAndReceipt",
+            &["txData", "receipt"],
+            TransactionDataAndReceiptVisitor(std::marker::PhantomData),
+        )
     }
 }
 
