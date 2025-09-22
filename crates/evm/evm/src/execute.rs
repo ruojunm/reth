@@ -6,8 +6,7 @@ use alloy_consensus::{BlockHeader, Header};
 use alloy_eips::eip2718::WithEncoded;
 pub use alloy_evm::block::{BlockExecutor, BlockExecutorFactory};
 use alloy_evm::{
-    block::{CommitChanges, ExecutableTx},
-    Evm, EvmEnv, EvmFactory, RecoveredTx, ToTxEnv,
+    block::{CommitChanges, ExecutableTx}, Evm, EvmEnv, EvmFactory, RecoveredTx, ToTxEnv
 };
 use alloy_primitives::{Address, B256};
 pub use reth_execution_errors::{
@@ -437,10 +436,11 @@ where
         self,
         state: impl StateProvider,
     ) -> Result<BlockBuilderOutcome<N>, BlockExecutionError> {
+        ::tracing::debug!("Run reth Finish()");
         let (evm, result) = self.executor.finish()?;
         let (db, evm_env) = evm.finish();
 
-        // merge all transitions into bundle state
+        // merge all     transitions into bundle state
         db.merge_transitions(BundleRetention::Reverts);
 
         // calculate the state root
@@ -451,7 +451,8 @@ where
 
         let (transactions, senders) =
             self.transactions.into_iter().map(|tx| tx.into_parts()).unzip();
-
+        
+        ::tracing::debug!("Assemble block, block_number: {}", evm_env.block_env.number);
         let block = self.assembler.assemble_block(BlockAssemblerInput {
             evm_env,
             execution_ctx: self.ctx,
